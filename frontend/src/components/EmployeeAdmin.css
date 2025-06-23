@@ -1,0 +1,68 @@
+//frontend/src/components/EmployeeAdmin.css
+
+.employee-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+  box-shadow: 1px 1px 5px #ccc;
+  overflow-x: auto;
+  display: block;
+  font-size: 1em;
+}
+
+.employee-table th, .employee-table td {
+  border: 2px ridge #bbb;
+  padding: 0.5em 0.7em;
+  text-align: left;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.employee-table th {
+  background: #eaeaea;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.employee-table tr:nth-child(even) td {
+  background: #f5f5f5;
+}
+
+/* Aktionen-Buttons nebeneinander und mit Abstand */
+.employee-table td:last-child button {
+  margin-right: 6px;
+  display: inline-block;
+  min-width: 80px;
+}
+
+/* Responsive Schriftgröße bei kleinerem Bildschirm */
+@media (max-width: 1200px) {
+  .employee-table {
+    font-size: 0.95em;
+  }
+}
+@media (max-width: 900px) {
+  .employee-table {
+    font-size: 0.85em;
+  }
+}
+@media (max-width: 700px) {
+  .employee-table {
+    font-size: 0.75em;
+  }
+}
+
+body, .employee-admin-root, .main-content {
+  padding-bottom: 3em;
+}
+
+.badge-print-area {
+  border: 2px solid #1976d2;
+  border-radius: 12px;
+  padding: 1.5em;
+  margin: 1.5em 0;
+  background: #f9f9fb;
+}
