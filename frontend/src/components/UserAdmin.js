@@ -26,7 +26,7 @@ const UserAdmin = () => {
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
-    fetch('http://localhost:5000/api/departments/bereiche', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/departments/bereiche`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => {
@@ -44,7 +44,7 @@ const UserAdmin = () => {
     // Nur wenn Bereich gewählt und Rolle muntazim
     if (selectedBereich && form.role === 'muntazim') {
       const token = sessionStorage.getItem('token');
-      fetch(`http://localhost:5000/api/departments/abteilungen?bereichId=${selectedBereich}`, {
+      fetch(`${process.env.REACT_APP_API_URL}/api/departments/abteilungen?bereichId=${selectedBereich}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => {
@@ -125,7 +125,7 @@ const UserAdmin = () => {
 
     const token = sessionStorage.getItem('token');
     try {
-      const response = await fetch('http://localhost:5000/api/auth/register', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/auth/register`, {
   	method: 'POST',
   	headers: {
     	  'Content-Type': 'application/json',
@@ -167,7 +167,7 @@ const UserAdmin = () => {
     const formData = new FormData();
     formData.append('file', file); // ✅ Datei als FormData senden
 
-    const response = await fetch('http://localhost:5000/api/auth/import', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/auth/import`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}` // 🚫 Kein Content-Type setzen!

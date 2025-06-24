@@ -17,7 +17,7 @@ const ImportMuntazim = () => {
                 const hashedPassword = await bcrypt.hash(row.password, 10);
                 // Erwartet: username, password, department_id, position, role im Excel/CSV
 		// API-Anfrage, um den Benutzer zu erstellen
-                fetch('http://localhost:5000/api/auth/register', {
+                fetch(`${process.env.REACT_APP_API_URL}/api/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

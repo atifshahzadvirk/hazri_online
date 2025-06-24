@@ -13,7 +13,7 @@ const NMAView = () => {
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
-    fetch('http://localhost:5000/api/employees/bereichs-mitarbeiter', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/employees/bereichs-mitarbeiter`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(async res => {

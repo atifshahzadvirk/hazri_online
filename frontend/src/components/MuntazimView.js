@@ -20,7 +20,7 @@ const MuntazimView = () => {
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
-    fetch('http://localhost:5000/api/employees/meine-abteilung', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/employees/meine-abteilung`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -43,7 +43,7 @@ useEffect(() => {
     e.preventDefault();
     setMessage('');
     const token = sessionStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/employees', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ useEffect(() => {
     });
     if (response.ok) {
       setMessage('Mitarbeiter erfolgreich angelegt!');
-      fetch('http://localhost:5000/api/employees/meine-abteilung', {
+      fetch(`${process.env.REACT_APP_API_URL}/api/employees/meine-abteilung`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
@@ -74,7 +74,7 @@ useEffect(() => {
   const deleteEmployee = async (id) => {
   const token = sessionStorage.getItem('token');
   setEditMessage('');
-  const response = await fetch(`http://localhost:5000/api/employees/${id}`, {
+  const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -86,7 +86,7 @@ useEffect(() => {
   setEditMessage('Fehler beim Löschen: ' + errorText);
 }
 
-  fetch('http://localhost:5000/api/employees/meine-abteilung', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/meine-abteilung`, {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -96,13 +96,13 @@ useEffect(() => {
   const deleteSelected = async () => {
   const token = sessionStorage.getItem('token');
   for (const id of selectedIds) {
-    await fetch(`http://localhost:5000/api/employees/${id}`, {
+    await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
   }
   // Jetzt die Tabelle immer per Fetch neu laden:
-  fetch('http://localhost:5000/api/employees/meine-abteilung', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/meine-abteilung`, {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -123,13 +123,13 @@ useEffect(() => {
   const saveEdit = async () => {
   const token = sessionStorage.getItem('token');
   setEditMessage('');
-  const response = await fetch(`http://localhost:5000/api/employees/${editMitarbeiter.id}`, {
+  const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${editMitarbeiter.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify(editMitarbeiter)
   });
   // Immer nach dem Bearbeiten: Markierung entfernen
-  await fetch(`http://localhost:5000/api/employees/${editMitarbeiter.id}/unprint`, {
+  await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${editMitarbeiter.id}/unprint`, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -138,7 +138,7 @@ useEffect(() => {
   const result = await response.json();
   setEditMessage(result.message);
   setEditMitarbeiter(null);
-  fetch('http://localhost:5000/api/employees/meine-abteilung', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/meine-abteilung`, {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())

@@ -115,7 +115,7 @@ useEffect(() => {
 useEffect(() => {
   if (editForm.bereich_id) {
     const token = sessionStorage.getItem('token');
-    fetch(`http://localhost:5000/api/departments/abteilungen?bereichId=${editForm.bereich_id}`, {
+    fetch(`${process.env.REACT_APP_API_URL}/api/departments/abteilungen?bereichId=${editForm.bereich_id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -162,7 +162,7 @@ const handleEditSubmit = async (e) => {
       return;
     }
   }
-  const response = await fetch(`http://localhost:5000/api/employees/${editMitarbeiter.id}`, {
+  const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${editMitarbeiter.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify({ ...editForm, department_id })
@@ -170,7 +170,7 @@ const handleEditSubmit = async (e) => {
 
   // NEU: Falls printed_on gelöscht werden soll, extra Request schicken
   if (!editForm.printed_on) {
-  await fetch(`/api/employees/${editMitarbeiter.id}/unprint`, {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/${editMitarbeiter.id}/unprint`, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -181,7 +181,8 @@ const handleEditSubmit = async (e) => {
     const result = await response.json();
     setEditMessage(result.message);
     setEditMitarbeiter(null);
-    fetch('http://localhost:5000/api/employees/all', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -231,13 +232,14 @@ const handleEditSubmit = async (e) => {
   const handlePrintBadge = React.useCallback(async (m) => {
   await generateBadgesPDF([m]);
   const token = sessionStorage.getItem('token');
-  await fetch(`/api/employees/${m.id}/printed`, {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/${m.id}/printed`, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${token}` }
   });
   setMessage('Ausweis wurde erneut exportiert und als gedruckt markiert.');
   // Mitarbeiterliste neu laden
-  fetch('http://localhost:5000/api/employees/all', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -341,19 +343,22 @@ const handleEditSubmit = async (e) => {
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
-    fetch('http://localhost:5000/api/departments/abteilungenAlle', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/departments/abteilungenAlle`, {
+
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => setAbteilungen(Array.isArray(data) ? data : []))
       .catch(() => setAbteilungen([]));
-    fetch('http://localhost:5000/api/departments/bereiche', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/departments/bereiche`, {
+
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => setBereicheNMA(Array.isArray(data) ? data : []))
       .catch(() => setBereicheNMA([]));
-    fetch('http://localhost:5000/api/employees/all', {
+    fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -365,7 +370,7 @@ const handleEditSubmit = async (e) => {
   useEffect(() => {
     if (form.bereich_id) {
       const token = sessionStorage.getItem('token');
-      fetch(`http://localhost:5000/api/departments/abteilungen?bereichId=${form.bereich_id}`, {
+      fetch(`${process.env.REACT_APP_API_URL}/api/departments/abteilungen?bereichId=${form.bereich_id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
@@ -408,7 +413,7 @@ const handleEditSubmit = async (e) => {
       }
     }
     
-    const response = await fetch('http://localhost:5000/api/employees', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -434,7 +439,8 @@ const handleEditSubmit = async (e) => {
       setAbteilungen([]);
       
       // Liste neu laden
-      fetch('http://localhost:5000/api/employees/all', {
+      fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
@@ -456,7 +462,8 @@ const handleFileUpload = (e) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  fetch('http://localhost:5000/api/employees/import', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/import`, {
+
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }, // KEIN Content-Type setzen!
     body: formData
@@ -471,7 +478,8 @@ const handleFileUpload = (e) => {
       }
 	setImportMsg(result);			//abgeändert
       // Liste neu laden
-      fetch('http://localhost:5000/api/employees/all', {
+      fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
@@ -497,7 +505,7 @@ const handleFullImport = (e) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  fetch('http://localhost:5000/api/employees/import-full', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/import-full`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }, // KEIN Content-Type setzen!
     body: formData
@@ -512,7 +520,8 @@ const handleFullImport = (e) => {
       }
       setImportMsg(result); // geändert: immer das ganze Objekt speichern
       // Liste neu laden
-      fetch('http://localhost:5000/api/employees/all', {
+      fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
@@ -528,7 +537,7 @@ const handleFullImport = (e) => {
   // Export-Button für Admin
   const handleExport = async () => {
     const token = sessionStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/employees/export', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/export`, {
     headers: { 'Authorization': `Bearer ${token}` }
     });
     const blob = await response.blob();
@@ -570,7 +579,7 @@ const handleFilteredExport = () => {
   // Nach dem Export: Backend-Update für printed_on
   const token = sessionStorage.getItem('token');
   for (const m of toPrint) {
-    await fetch(`/api/employees/${m.id}/printed`, {
+    fetch(`${process.env.REACT_APP_API_URL}/api/employees/${m.id}/printed`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -579,7 +588,8 @@ const handleFilteredExport = () => {
   setMessage(`${toPrint.length} Ausweise wurden exportiert und als gedruckt markiert.`);
 
   // Mitarbeiterliste neu laden (Refresh)
-  fetch('http://localhost:5000/api/employees/all', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -589,7 +599,8 @@ const handleFilteredExport = () => {
   
   const deleteEmployee = async (id) => {
   const token = sessionStorage.getItem('token');
-  const response = await fetch(`http://localhost:5000/api/employees/${id}`, {
+  const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
+
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}` }
   });
@@ -604,7 +615,7 @@ const handleFilteredExport = () => {
 
 
   // Liste immer neu laden, damit der Stand korrekt ist!
-  fetch('http://localhost:5000/api/employees/all', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -615,13 +626,14 @@ const deleteSelected = async () => {
   const token = sessionStorage.getItem('token');
   let success = 0;
   for (const id of selectedIds) {
-    const response = await fetch(`http://localhost:5000/api/employees/${id}`, {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (response.ok) success++;
   }
-  fetch('http://localhost:5000/api/employees/all', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())
@@ -641,13 +653,14 @@ const deleteSelected = async () => {
   const token = sessionStorage.getItem('token');
   let success = 0;
   for (const id of selectedIds) {
-    const response = await fetch(`http://localhost:5000/api/employees/${id}/unprint`, {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/${id}/unprint`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (response.ok) success++;
   }
-  fetch('http://localhost:5000/api/employees/all', {
+  fetch(`${process.env.REACT_APP_API_URL}/api/employees/all`, {
+
     headers: { 'Authorization': `Bearer ${token}` }
   })
     .then(res => res.json())

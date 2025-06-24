@@ -27,8 +27,9 @@ const EmployeeForm = () => {
     useEffect(() => {
         if (userRole === 'muntazim') {
             // Hole die Abteilung des eingeloggten Muntazim
-            fetch('http://localhost:5000/api/departments/mein-bereich-abteilung', {
-                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+            fetch(`${process.env.REACT_APP_API_URL}/api/departments/mein-bereich-abteilung`, 
+	    { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+
             })
                 .then(res => res.json())
                 .then(data => {
@@ -37,9 +38,8 @@ const EmployeeForm = () => {
                 });
         } else {
             // Admin sieht alle Abteilungen
-            fetch('http://localhost:5000/api/departments/abteilungenAlle', {
-                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-            })
+            fetch(`${process.env.REACT_APP_API_URL}/api/departments/abteilungenAlle`, {
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
                 .then(res => res.json())
                 .then(data => setAbteilungen(Array.isArray(data) ? data : []));
         }
@@ -47,7 +47,7 @@ const EmployeeForm = () => {
 
     // ID-Prüfung über Backend-API
     const verifyId = async (id) => {
-        const response = await fetch('http://localhost:5000/api/employees/verify-id', {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees/verify-id`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idNumber: id })
@@ -68,7 +68,7 @@ const EmployeeForm = () => {
             setVerificationStatus('ID-Nummer ungültig.');
             return;
         }
-        const response = await fetch('http://localhost:5000/api/employees', {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/employees`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
