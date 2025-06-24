@@ -30,7 +30,6 @@ const EmployeeForm = () => {
             fetch(`${process.env.REACT_APP_API_URL}/api/departments/mein-bereich-abteilung`, 
 	    { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
 
-            })
                 .then(res => res.json())
                 .then(data => {
                     setDepartmentId(data.abteilungId);
