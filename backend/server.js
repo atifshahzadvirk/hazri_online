@@ -10,6 +10,21 @@ const departmentsRoutes = require('./routes/departments'); // NEU
 const connection = require('./db');
 
 const app = express();
+
+// --- Logging für alle Requests ---
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// --- Health-Endpoints ---
+app.get('/health', (req, res) => {
+  res.send('OK');
+});
+app.head('/health', (req, res) => {
+  res.sendStatus(200);
+});
+
 app.use(cors());
 app.use(bodyParser.json());
 // Datei-Upload Middleware aktivieren - ("Entferne die globale Registrierung von express-fileupload:") 
@@ -20,3 +35,8 @@ app.use('/api/departments', departmentsRoutes); // NEU
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// --- Self-Ping, um das Backend wach zu halten ---
+setInterval(() => {
+  fetch('https://hazri-online.onrender.com/health').catch(() => {});
+}, 5 * 60 * 1000);
