@@ -213,6 +213,7 @@ router.post('/login', async (req, res) => {
             res.status(400).send('Ungültiges Passwort');
         }
     } catch (err) {
+	console.error('Login-Fehler:', err); // <-- NEUE ZEILE EINFÜGEN!
         res.status(500).send('Fehler beim Login');
     }
 });
