@@ -39,7 +39,7 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 // --- Self-Ping, um das Backend wach zu halten ---
 setInterval(() => {
   fetch('https://hazri-online.onrender.com/health').catch(() => {});
-}, 5 * 60 * 1000);
+}, 13 * 60 * 1000); // alle 13 Minuten
 
 // Globales Error-Logging für Express
 app.use((err, req, res, next) => {
