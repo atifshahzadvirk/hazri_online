@@ -40,3 +40,9 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 setInterval(() => {
   fetch('https://hazri-online.onrender.com/health').catch(() => {});
 }, 5 * 60 * 1000);
+
+// Globales Error-Logging für Express
+app.use((err, req, res, next) => {
+  console.error('Globaler Fehler:', err);
+  res.status(500).send('Interner Serverfehler');
+});
