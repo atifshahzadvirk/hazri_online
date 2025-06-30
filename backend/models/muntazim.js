@@ -1,48 +1,37 @@
 // backend/models/muntazim.js
 
-const connection = require('../db');
+const pool = require('../db'); // <--- Korrigiert!
 
-const createMuntazim = (username, password, department_id, position, role, idNumber) => {
+const createMuntazim = async (username, password, department_id, position, role, idNumber) => {
+    if (!username) throw new Error('Benutzername fehlt.');
+    if (!password) throw new Error('Passwort fehlt.');
+    if (!role) throw new Error('Rolle fehlt.');
+    if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
+        throw new Error('Abteilung/Bereich fehlt.');
+    }
+    if (!idNumber && role !== 'admin') throw new Error('ID Nummer fehlt.');
 
-    return new Promise((resolve, reject) => {
-        if (!username) return reject(new Error('Benutzername fehlt.'));
-        if (!password) return reject(new Error('Passwort fehlt.'));
-        if (!role) return reject(new Error('Rolle fehlt.'));
-        // Abteilung/Bereich nur für bestimmte Rollen Pflicht!
-        if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
-            return reject(new Error('Abteilung/Bereich fehlt.'));
-        }
-        if (!idNumber && role !== 'admin') return reject(new Error('ID Nummer fehlt.'));
-
-        connection.query(
+    try {
+        const [result] = await pool.query(
             'INSERT INTO muntazim (username, password, department_id, position, role, idNumber) VALUES (?, ?, ?, ?, ?, ?)',
-            [username, password, department_id, position, role, idNumber],
-            (err, result) => {
-                if (err) {
-                    if (err.code === 'ER_DUP_ENTRY') {
-                        return reject(new Error('Benutzername ist bereits vergeben.'));
-                    }
-                    return reject(err);
-                }
-                resolve(result);
-            }
+            [username, password, department_id, position, role, idNumber]
         );
-    });
+        return result;
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            throw new Error('Benutzername ist bereits vergeben.');
+        }
+        throw err;
+    }
 };
 
-const findMuntazimByUsername = (username) => {
-    return new Promise((resolve, reject) => {
-        connection.query(
-            'SELECT * FROM muntazim WHERE username = ?',
-            [username],
-            (err, results) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(results[0]);
-            }
-        );
-    });
+const findMuntazimByUsername = async (username) => {
+    const [rows] = await pool.query(
+        'SELECT * FROM muntazim WHERE username = ?',
+        [username]
+    );
+    return rows[0];
 };
 
 module.exports = { createMuntazim, findMuntazimByUsername };
+

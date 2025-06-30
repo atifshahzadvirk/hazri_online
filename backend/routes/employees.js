@@ -18,7 +18,7 @@ function getValidIdData(idNumber) {
 const { createEmployee } = require('../models/Employee');
 const authenticate = require('../middlewares/authenticate');
 const authorizeRole = require('../middlewares/authorizeRole');
-const connection = require('../db');
+const pool = require('../db'); // <--- Pool statt connection
 
 router.use(fileUpload());
 
@@ -32,7 +32,7 @@ function getValidIds() {
 }
 
 // Zentrale Prüfungen für Mitarbeiter-Anlage
-async function validateEmployee({ name, role, idNumber, majlisName, department_id }, connection, skipIdExcelCheck = false) {
+async function validateEmployee({ name, role, idNumber, majlisName, department_id }, pool, skipIdExcelCheck = false) { // <--- pool statt connection
     // Pflichtfelder prüfen
     const rolesWithoutDepartment = ['MA', 'SI', 'SM']; // <-- NEU
     if (!name || !role || !idNumber || !majlisName || (!department_id && !rolesWithoutDepartment.includes(role))) { // <-- ANPASSUNG
@@ -49,7 +49,7 @@ async function validateEmployee({ name, role, idNumber, majlisName, department_i
 
     // Prüfung: Nur ein Muntazim pro Abteilung
     if (role === 'Muntazim') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM employees WHERE role = ? AND department_id = ?',
             [role, department_id]
         );
@@ -60,7 +60,7 @@ async function validateEmployee({ name, role, idNumber, majlisName, department_i
 
     // Prüfung: Nur ein NMA pro Bereich
     if (role === 'NMA') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM employees WHERE role = ? AND department_id = ?',
             [role, department_id]
         );
@@ -70,7 +70,7 @@ async function validateEmployee({ name, role, idNumber, majlisName, department_i
     }
 
     // Prüfung: ID schon vergeben
-    const [idRows] = await connection.promise().query(
+    const [idRows] = await pool.query(
         'SELECT id FROM employees WHERE idNumber = ?',
         [idNumber]
     );
@@ -89,7 +89,7 @@ router.post('/', authenticate, async (req, res) => {
     }
       // NEU: Nur ein SM, MA, SI zulassen
     if (['SM', 'MA', 'SI'].includes(role)) {
-        const [existing] = await connection.promise().query(
+        const [existing] = await pool.query(
             "SELECT COUNT(*) AS count FROM employees WHERE role = ?", [role]
         );
         if (existing[0].count > 0) {
@@ -98,7 +98,7 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     try {
-        await validateEmployee({ name, role, idNumber, majlisName, department_id }, connection);
+        await validateEmployee({ name, role, idNumber, majlisName, department_id }, pool); // <--- pool übergeben!
 	        // Zusatzfelder aus Excel lesen
         let B_Name = '';
         let B_Majlis = '';
@@ -130,7 +130,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     // Prüfung: Nur ein Muntazim pro Abteilung nach Update
     if (role === 'Muntazim') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM employees WHERE role = ? AND department_id = ? AND id != ?',
             [role, department_id, id]
         );
@@ -141,7 +141,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     // Prüfung: Nur ein NMA pro Bereich nach Update
     if (role === 'NMA') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM employees WHERE role = ? AND department_id = ? AND id != ?',
             [role, department_id, id]
         );
@@ -151,13 +151,13 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
           // 1. Muntazim-Schutz: Muntazim darf keinen Muntazim bearbeiten
-    const [targetRows] = await connection.promise().query('SELECT role FROM employees WHERE id = ?', [id]);
+    const [targetRows] = await pool.query('SELECT role FROM employees WHERE id = ?', [id]);
     if (req.user.role === 'muntazim' && targetRows[0]?.role === 'Muntazim') {
       return res.status(403).json({ message: 'Sie dürfen den Muntazim nicht bearbeiten oder löschen.' });
     }
 
     // 2. Prüfung: ID-Nummer darf nicht doppelt vergeben sein (außer beim eigenen Datensatz)
-    const [idRows] = await connection.promise().query(
+    const [idRows] = await pool.query(
         'SELECT id FROM employees WHERE idNumber = ? AND id != ?',
         [idNumber, id]
     );
@@ -166,7 +166,7 @@ router.put('/:id', authenticate, async (req, res) => {
     }
     try {
   // Vorherige Werte holen für die qualifizierte Meldung
-  const [oldRows] = await connection.promise().query(
+  const [oldRows] = await pool.query(
     `SELECT e.name, e.role, d.name AS abteilungsName, b.name AS bereichsName
      FROM employees e
      LEFT JOIN departments d ON e.department_id = d.id
@@ -175,13 +175,13 @@ router.put('/:id', authenticate, async (req, res) => {
   );
   const old = oldRows[0];
 
-  await connection.promise().query(
+  await pool.query( // <--- geändert!
     'UPDATE employees SET name=?, role=?, idNumber=?, majlisName=?, department_id=? WHERE id=?',
     [name, role, idNumber, majlisName, department_id, id]
   );
 
   // Neue Werte holen
-  const [newRows] = await connection.promise().query(
+  const [newRows] = await pool.query(
     `SELECT e.name, e.role, d.name AS abteilungsName, b.name AS bereichsName
      FROM employees e
      LEFT JOIN departments d ON e.department_id = d.id
@@ -202,20 +202,21 @@ router.put('/:id', authenticate, async (req, res) => {
   res.status(500).json({ message: 'Fehler beim Bearbeiten.' });
 }
 
+
 });
 
     // Mitarbeiter löschen (DELETE)
 	router.delete('/:id', authenticate, async (req, res) => {
     	const id = req.params.id;
     // Muntazim-Schutz: Muntazim darf keinen Muntazim löschen
-    	const [targetRows] = await connection.promise().query('SELECT role FROM employees WHERE id = ?', [id]);
+    	const [targetRows] = await pool.query('SELECT role FROM employees WHERE id = ?', [id]);
     	if (req.user.role === 'muntazim' && targetRows[0]?.role === 'Muntazim') {
       	return res.status(403).json({ message: 'Sie dürfen den Muntazim nicht bearbeiten oder löschen.' });
     }
 
     try {
   // Vorherige Werte holen für qualifizierte Meldung
-  const [oldRows] = await connection.promise().query(
+  const [oldRows] = await pool.query(
     `SELECT e.name, e.role, d.name AS abteilungsName, b.name AS bereichsName
      FROM employees e
      LEFT JOIN departments d ON e.department_id = d.id
@@ -224,7 +225,7 @@ router.put('/:id', authenticate, async (req, res) => {
   );
   const old = oldRows[0];
 
-  await connection.promise().query('DELETE FROM employees WHERE id = ?', [id]);
+  await pool.query('DELETE FROM employees WHERE id = ?', [id]);
 
   let detailMsg = `Mitarbeiter ${old?.name || ''} (${old?.role || ''}) aus Abteilung "${old?.abteilungsName || '-'}" (Bereich "${old?.bereichsName || '-' }") wurde gelöscht.`;
   res.json({ message: detailMsg });
@@ -237,7 +238,7 @@ router.put('/:id', authenticate, async (req, res) => {
 // Alle Mitarbeiter (für Admin-Übersicht, jetzt mit Bereich/Abteilung/Ersteller/Zeitstempel)
 router.get('/all', authenticate, async (req, res) => {
     try {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             `SELECT e.*, 
                     e.B_Name, 
             	    e.B_Majlis, 
@@ -256,65 +257,66 @@ router.get('/all', authenticate, async (req, res) => {
 });
 
 // Bereichs-Mitarbeiter (für NMA(read-only))
-router.get('/bereichs-mitarbeiter', authenticate, (req, res) => {
+router.get('/bereichs-mitarbeiter', authenticate, async (req, res) => { // <-- async hinzugefügt!
     if (req.user.role !== 'NMA(read-only)') {
         return res.status(403).json({ message: 'Nicht berechtigt.' });
     }
 
-    connection.query(
-        `SELECT e.*, 
-                d.name AS abteilungsName, 
-                b.name AS bereichsName, 
-                e.created_at, 
-                e.created_by
-         FROM employees e
-         JOIN departments d ON e.department_id = d.id
-         LEFT JOIN departments b ON d.parent_id = b.id
-         WHERE d.parent_id = ?`,
-        [req.user.department_id],
-        (err, results) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json([]);
-            }
-            // Gruppierung nach Abteilungen
-            const gruppiert = results.reduce((acc, mitarbeiter) => {
-                const key = mitarbeiter.abteilungsName;
-                if (!acc[key]) acc[key] = [];
-                acc[key].push(mitarbeiter);
-                return acc;
-            }, {});
-            res.json(gruppiert);
-        }
-    );
-});
+    try { // <-- try/catch hinzugefügt!
+        const [results] = await pool.query(
+            `SELECT e.*, 
+                    d.name AS abteilungsName, 
+                    b.name AS bereichsName, 
+                    e.created_at, 
+                    e.created_by
+             FROM employees e
+             JOIN departments d ON e.department_id = d.id
+             LEFT JOIN departments b ON d.parent_id = b.id
+             WHERE d.parent_id = ?`,
+            [req.user.department_id]
+        ); // <-- Callback entfernt, await eingefügt!
+
+        // Gruppierung nach Abteilungen (wie vorher)
+        const gruppiert = results.reduce((acc, mitarbeiter) => {
+            const key = mitarbeiter.abteilungsName;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(mitarbeiter);
+            return acc;
+        }, {});
+        res.json(gruppiert);
+    } catch (err) { // <-- Fehlerbehandlung jetzt im catch!
+        console.error(err);
+        return res.status(500).json([]);
+    }
+}); // <-- Callback-Klammer entfernt, async-Klammer bleibt!
+
 
 // Mitarbeiter einer Abteilung (für Muntazim, mit Bereich/Abteilung/Ersteller/Zeitstempel)
-router.get('/meine-abteilung', authenticate, (req, res) => {
+router.get('/meine-abteilung', authenticate, async (req, res) => {
     if (req.user.role !== 'muntazim') {
         return res.status(403).json({ message: 'Nicht berechtigt.' });
     }
 
-    connection.query(
-        `SELECT e.*, 
-                d.name AS abteilungsName, 
-                b.name AS bereichsName, 
-                e.created_at, 
-                e.created_by
-         FROM employees e
-         LEFT JOIN departments d ON e.department_id = d.id
-         LEFT JOIN departments b ON d.parent_id = b.id
-         WHERE e.department_id = ?`,
-        [req.user.department_id],
-        (err, results) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json([]);
-            }
-            res.json(results);
-        }
-    );
+    try {
+        const [results] = await pool.query(
+            `SELECT e.*, 
+                    d.name AS abteilungsName, 
+                    b.name AS bereichsName, 
+                    e.created_at, 
+                    e.created_by
+             FROM employees e
+             LEFT JOIN departments d ON e.department_id = d.id
+             LEFT JOIN departments b ON d.parent_id = b.id
+             WHERE e.department_id = ?`,
+            [req.user.department_id]
+        );
+        res.json(results);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json([]);
+    }
 });
+
 
 // ID-Prüfung (unverändert)
 router.post('/verify-id', (req, res) => {
@@ -347,7 +349,7 @@ router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) 
                     idNumber: row.idNumber,
                     majlisName: row.majlisName,
                     department_id: row.department_id
-                }, connection);
+                }, pool); // <--- geändert!
 
 		// Zusatzfelder aus Excel lesen
                 let B_Name = '';
@@ -417,21 +419,21 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                 let departmentId = null;
                 if (['SM', 'MA', 'SI'].includes(row.Rolle)) {
                     // Prüfen, ob schon vorhanden
-                    const [existing] = await connection.promise().query(
+                    const [existing] = await pool.query(
                         "SELECT COUNT(*) AS count FROM employees WHERE role = ?", [row.Rolle]
                     );
                     if (existing[0].count > 0) {
                         throw new Error(`Es darf nur einen Mitarbeiter mit der Rolle ${row.Rolle} geben.`);
                     }
                     // Department für diese Rolle suchen oder anlegen
-                    const [dept] = await connection.promise().query(
+                    const [dept] = await pool.query(
                         "SELECT id FROM departments WHERE type = ? LIMIT 1", [row.Rolle]
                     );
                     if (dept.length > 0) {
                         departmentId = dept[0].id;
                     } else {
                         // Neuen Department-Eintrag anlegen
-                        const result = await connection.promise().query(
+                        const result = await pool.query(
                             "INSERT INTO departments (name, type) VALUES (?, ?)",
                             [row.Mitarbeitername, row.Rolle]
                         );
@@ -443,7 +445,7 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                         idNumber: row.IDNummer,
                         majlisName: row.Majlisname,
                         department_id: departmentId
-                    }, connection);
+                    }, pool); // <--- geändert!
 
                     // Zusatzfelder aus Excel lesen
                     let B_Name = '';
@@ -474,14 +476,14 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                 // --- ALTE LOGIK FÜR BEREICHE UND ABTEILUNGEN BLEIBT UNVERÄNDERT ---
                 // 1. Bereich prüfen/ggf. anlegen (wenn Bereichsname vorhanden)
                 if (row.Bereichsname) {
-                    let [bereich] = await connection.promise().query(
+                    let [bereich] = await pool.query(
                         "SELECT id FROM departments WHERE name = ? AND type = 'NMA'",
                         [row.Bereichsname]
                     );
                     
                     if (bereich.length === 0) {
                         // Neuen Bereich anlegen mit parent_id auf MA (wenn ParentTyp angegeben)
-                        let result = await connection.promise().query(
+                        let result = await pool.query(
                             "INSERT INTO departments (name, type, parent_id) VALUES (?, 'NMA', ?)",
                             [row.Bereichsname, parentId]
                         );
@@ -490,7 +492,7 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                         bereichId = bereich[0].id;
                         // Optional: parent_id aktualisieren, wenn ParentTyp angegeben
                         if (parentId) {
-                            await connection.promise().query(
+                            await pool.query(
                                 "UPDATE departments SET parent_id = ? WHERE id = ?",
                                 [parentId, bereichId]
                             );
@@ -504,12 +506,12 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                 } else if (!bereichId && row.ParentTyp === 'MA') {
                     parentForAbteilung = parentId;
                 }
-                let [abt] = await connection.promise().query(
+                let [abt] = await pool.query(
                     "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
                     [row.Abteilungsname, parentForAbteilung]
                 );
                 if (abt.length === 0) {
-                    let result = await connection.promise().query(
+                    let result = await pool.query(
                         "INSERT INTO departments (name, type, parent_id) VALUES (?, 'Muntazim', ?)",
                         [row.Abteilungsname, parentForAbteilung]
                     );
@@ -524,7 +526,7 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
                     idNumber: row.IDNummer,
                     majlisName: row.Majlisname,
                     department_id: abteilungId
-                }, connection);
+                }, pool); // <--- geändert!
 
                 // Zusatzfelder aus Excel lesen
                 let B_Name = '';
@@ -570,7 +572,7 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
 // Export aller Mitarbeiter als Excel (nur für Admin)
 router.get('/export', authenticate, authorizeRole(['admin']), async (req, res) => {
     try {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             `SELECT e.*, 
                     d.name AS abteilungsName, 
                     b.name AS bereichsName, 
@@ -596,7 +598,7 @@ router.get('/export', authenticate, authorizeRole(['admin']), async (req, res) =
 // Ausweis-Druckstatus: printed_on setzen (nach PDF-Export)
 router.put('/:id/printed', authenticate, async (req, res) => {
   try {
-    await connection.promise().query(
+    await pool.query(
       'UPDATE employees SET printed_on = NOW() WHERE id = ?', [req.params.id]
     );
     res.json({ message: 'printed_on gesetzt' });
@@ -608,7 +610,7 @@ router.put('/:id/printed', authenticate, async (req, res) => {
 // Ausweis-Druckstatus: printed_on zurücksetzen (manuell)
 router.put('/:id/unprint', authenticate, async (req, res) => {
   try {
-    await connection.promise().query(
+    await pool.query(
       'UPDATE employees SET printed_on = NULL WHERE id = ?', [req.params.id]
     );
     res.json({ message: 'printed_on entfernt' });

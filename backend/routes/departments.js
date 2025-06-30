@@ -1,11 +1,11 @@
 // backend/routes/departments.js
 const express = require('express');
 const router = express.Router();
-const connection = require('../db');
+const pool = require('../db'); // <--- Angepasst!
 const authenticate = require('../middlewares/authenticate');
 
 // Alle Bereiche (Typ = 'NMA') abrufen
-router.get('/bereiche', authenticate, (req, res) => {
+router.get('/bereiche', authenticate, async (req, res) => { // <--- async!
     const query = `
         SELECT d.id, d.name, d.type, m.username as leiter 
         FROM departments d
@@ -14,71 +14,68 @@ router.get('/bereiche', authenticate, (req, res) => {
         ORDER BY d.name
     `;
     
-    connection.query(query, (err, results) => {
-        if (err) {
-            console.error('Fehler beim Abrufen der Bereiche:', err);
-            return res.status(500).json([]);
-        }
+    try {
+        const [results] = await pool.query(query);
         res.json(Array.isArray(results) ? results : []);
-    });
+    } catch (err) {
+        console.error('Fehler beim Abrufen der Bereiche:', err);
+        res.status(500).json([]);
+    }
 });
 
 // Abteilungen (Typ = 'Muntazim') eines Bereichs abrufen
-router.get('/abteilungen', authenticate, (req, res) => {
+router.get('/abteilungen', authenticate, async (req, res) => {
     const bereichId = req.query.bereichId;
-    
     if (!bereichId) {
         return res.status(400).json({ message: 'Bereich-ID fehlt' });
     }
-    
     const query = `
-        SELECT d.id, d.name, m.username as leiter 
+        SELECT d.id, d.name, m.username as leiter
         FROM departments d
         LEFT JOIN muntazim m ON m.department_id = d.id
         WHERE d.type = 'Muntazim' AND d.parent_id = ?
         ORDER BY d.name
     `;
-    
-    connection.query(query, [bereichId], (err, results) => {
-        if (err) {
-            console.error('Fehler beim Abrufen der Abteilungen:', err);
-            return res.status(500).json([]);
-        }
+    try {
+        const [results] = await pool.query(query, [bereichId]);
         res.json(Array.isArray(results) ? results : []);
-    });
+    } catch (err) {
+        console.error('Fehler beim Abrufen der Abteilungen:', err);
+        res.status(500).json([]);
+    }
 });
 
+
 // NEU: Alle Abteilungen (Typ = 'Muntazim') abrufen (für Dropdowns)
-router.get('/abteilungenAlle', authenticate, (req, res) => {
+router.get('/abteilungenAlle', authenticate, async (req, res) => {
     const query = `
-        SELECT d.id, d.name 
+        SELECT d.id, d.name
         FROM departments d
         WHERE d.type = 'Muntazim'
         ORDER BY d.name
     `;
-    connection.query(query, (err, results) => {
-        if (err) {
-            console.error('Fehler beim Abrufen aller Abteilungen:', err);
-            return res.status(500).json([]);
-        }
+    try {
+        const [results] = await pool.query(query);
         res.json(Array.isArray(results) ? results : []);
-    });
+    } catch (err) {
+        console.error('Fehler beim Abrufen aller Abteilungen:', err);
+        res.status(500).json([]);
+    }
 });
 
+
 // Bereich und Abteilung des eingeloggten Users abrufen
-router.get('/mein-bereich-abteilung', authenticate, (req, res) => {
+router.get('/mein-bereich-abteilung', authenticate, async (req, res) => {
     const userId = req.user.id;
-    
-    connection.query('SELECT department_id FROM muntazim WHERE id = ?', [userId], (err, userResults) => {
-        if (err || !userResults.length) {
+    try {
+        const [userResults] = await pool.query('SELECT department_id FROM muntazim WHERE id = ?', [userId]);
+        if (!userResults.length) {
             return res.status(404).json({ message: 'Benutzer nicht gefunden' });
         }
-        
         const departmentId = userResults[0].department_id;
-        
         const query = `
-            SELECT 
-                abt.id as abteilungId, 
+            SELECT
+                abt.id as abteilungId,
                 abt.name as abteilungsName,
                 abtLeiter.username as abteilungsLeiter,
                 bereich.id as bereichId,
@@ -90,15 +87,16 @@ router.get('/mein-bereich-abteilung', authenticate, (req, res) => {
             LEFT JOIN muntazim bereichLeiter ON bereichLeiter.department_id = bereich.id AND bereichLeiter.position = 'NMA'
             WHERE abt.id = ?
         `;
-        
-        connection.query(query, [departmentId], (err, results) => {
-            if (err || !results.length) {
-                return res.status(404).json({ message: 'Abteilung/Bereich nicht gefunden' });
-            }
-            
-            res.json(results[0]);
-        });
-    });
+        const [results] = await pool.query(query, [departmentId]);
+        if (!results.length) {
+            return res.status(404).json({ message: 'Abteilung/Bereich nicht gefunden' });
+        }
+        res.json(results[0]);
+    } catch (err) {
+        console.error('Fehler beim Abrufen von Bereich/Abteilung:', err);
+        res.status(500).json({ message: 'Serverfehler' });
+    }
 });
+
 
 module.exports = router;

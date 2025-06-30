@@ -1,20 +1,19 @@
 // backend/db.js
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise'); // <--- ÄNDERN: promise verwenden!
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-const connection = mysql.createConnection({
-    host: process.env.MYSQL_HOST,           // aus .env
-    user: process.env.MYSQL_USER,           // aus .env
-    password: process.env.MYSQL_PASSWORD,   // aus .env
-    database: process.env.MYSQL_DATABASE,   // aus .env
-    port: process.env.MYSQL_PORT            // aus .env
+// Connection Pool statt Einzelverbindung!
+const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  port: process.env.MYSQL_PORT,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-connection.connect(err => {
-    if (err) throw err;
-    console.log('MySQL connected');
-});
-
-module.exports = connection;
+module.exports = pool; // <--- Pool exportieren!

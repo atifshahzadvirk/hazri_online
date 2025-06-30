@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const fileUpload = require('express-fileupload');
 const { createMuntazim, findMuntazimByUsername } = require('../models/muntazim');
-const connection = require('../db');
+const pool = require('../db'); // <--- Pool statt Einzelverbindung!
 const authenticate = require('../middlewares/authenticate');
 const authorizeRole = require('../middlewares/authorizeRole');
 require('dotenv').config();
@@ -26,26 +26,22 @@ function getValidIds() {
 }
 
 // Hilfsfunktion: Finde User nach ID
-function findMuntazimByIdNumber(idNumber) {
-    return new Promise((resolve, reject) => {
-        connection.query(
-            'SELECT id FROM muntazim WHERE idNumber = ?',
-            [idNumber],
-            (err, results) => {
-                if (err) return reject(err);
-                resolve(results.length > 0 ? results[0] : null);
-            }
-        );
-    });
+async function findMuntazimByIdNumber(idNumber) {
+    const [rows] = await pool.query(
+        'SELECT id FROM muntazim WHERE idNumber = ?',
+        [idNumber]
+    );
+    return rows.length > 0 ? rows[0] : null;
 }
 
-// Zentrale Prüfungsfunktion für User-Anlage
-async function validateUser({ username, password, role, idNumber, department_id }, connection) {
 
+// Zentrale Prüfungsfunktion für User-Anlage
+async function validateUser({ username, password, role, idNumber, department_id }) {
     // Pflichtfelder prüfen (ID nur für admin optional)
     if (!username || !password || !role) {
         throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
     }
+
     if (role !== 'admin' && !idNumber) {
         throw new Error('ID Nummer ist für diese Rolle Pflicht.');
     }
@@ -57,18 +53,18 @@ async function validateUser({ username, password, role, idNumber, department_id 
         if (!validIds.includes(String(idNumber).trim())) {
             throw new Error('ID-Nummer ungültig.');
         }
-    // ID-Nummer muss 5 Ziffern sein
+
+        // ID-Nummer muss 5 Ziffern sein
         if (!/^\d{5}$/.test(String(idNumber).trim())) {
             throw new Error('Die ID Nummer muss genau 5 Ziffern haben (00001 bis 99999).');
         }
 
-    // Prüfung: ID-Nummer bereits vergeben
+        // Prüfung: ID-Nummer bereits vergeben
         const existingId = await findMuntazimByIdNumber(idNumber);
         if (existingId) {
             throw new Error('ID-Nummer ist bereits vergeben.');
         }
     }
-
 
     // Nur für bestimmte Rollen department_id prüfen
     if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
@@ -80,10 +76,10 @@ async function validateUser({ username, password, role, idNumber, department_id 
     if (existingUser) {
         throw new Error('Benutzername ist bereits vergeben.');
     }
-    
+
     // Prüfung: Nur ein Muntazim pro Abteilung
     if (role === 'muntazim') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM muntazim WHERE role = ? AND department_id = ?',
             [role, department_id]
         );
@@ -94,7 +90,7 @@ async function validateUser({ username, password, role, idNumber, department_id 
 
     // Prüfung: Nur ein NMA(read-only) pro Bereich
     if (role === 'NMA(read-only)') {
-        const [rows] = await connection.promise().query(
+        const [rows] = await pool.query(
             'SELECT COUNT(*) AS count FROM muntazim WHERE role = ? AND department_id = ?',
             [role, department_id]
         );
@@ -106,12 +102,13 @@ async function validateUser({ username, password, role, idNumber, department_id 
 
 
 
+
 // Einzelne User-Anlage mit Backup
 router.post('/register', authenticate, async (req, res) => {
     const { username, password, department_id, position, role, idNumber } = req.body;
 
     try {
-        await validateUser({ username, password, role, idNumber, department_id }, connection);
+        await validateUser({ username, password, role, idNumber, department_id });
 
         const hashedPassword = await bcrypt.hash(password, 10);
         await createMuntazim(
@@ -151,7 +148,7 @@ router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) 
                     role: row.role,
                     idNumber: row.idNumber,
                     department_id: row.department_id
-                }, connection);
+                });
 
                 const hashedPassword = await bcrypt.hash(row.password, 10);
                 await createMuntazim(

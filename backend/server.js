@@ -7,7 +7,7 @@ const fileUpload = require('express-fileupload'); // Datei-Upload Middleware
 const authRoutes = require('./routes/auth');
 const employeesRoutes = require('./routes/employees'); // NEU: Employees-Routen einbinden
 const departmentsRoutes = require('./routes/departments'); // NEU
-const connection = require('./db');
+
 
 const app = express();
 
