@@ -67,7 +67,7 @@ async function validateUser({ username, password, role, idNumber, department_id 
     }
 
     // Nur für bestimmte Rollen department_id prüfen
-    if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
+    if ((role === 'muntazim' || role === 'NMA(read-only)' || role === 'MA-HN') && !department_id) {
         throw new Error('Abteilung/Bereich muss ausgewählt werden.');
     }
 
@@ -128,7 +128,7 @@ router.post('/register', authenticate, async (req, res) => {
 
 
 // Massen-Upload mit Backup (Excel/CSV)
-router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) => {
+router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
     if (!req.files || !req.files.file) {
         return res.status(400).json({ 
             summary: 'Keine Datei hochgeladen.',

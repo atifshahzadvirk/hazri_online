@@ -329,7 +329,7 @@ router.post('/verify-id', (req, res) => {
 });
 
 // Import (nur für Admin) - jetzt mit zentraler Prüfung und Fehlerprotokoll
-router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) => {  
+router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {  
     if (!req.files?.file) {
         return res.status(400).json({
             summary: 'Keine Datei hochgeladen.',
@@ -391,7 +391,7 @@ router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) 
 });
 
 // Komplett-Import (Bereiche/Abteilungen/Mitarbeiter) - jetzt mit zentraler Prüfung und Fehlerprotokoll
-router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, res) => {
+router.post('/import-full', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
     if (!req.files?.file) {
         return res.status(400).json({
             summary: 'Keine Datei hochgeladen.',
@@ -570,7 +570,7 @@ router.post('/import-full', authenticate, authorizeRole(['admin']), async (req, 
 });
 
 // Export aller Mitarbeiter als Excel (nur für Admin)
-router.get('/export', authenticate, authorizeRole(['admin']), async (req, res) => {
+router.get('/export', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT e.*, 

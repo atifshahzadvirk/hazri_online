@@ -6,6 +6,7 @@ const createMuntazim = async (username, password, department_id, position, role,
     if (!username) throw new Error('Benutzername fehlt.');
     if (!password) throw new Error('Passwort fehlt.');
     if (!role) throw new Error('Rolle fehlt.');
+
     if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
         throw new Error('Abteilung/Bereich fehlt.');
     }

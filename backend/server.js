@@ -37,9 +37,13 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 // --- Self-Ping, um das Backend wach zu halten ---
-setInterval(() => {
-  fetch('https://hazri-online.onrender.com/health').catch(() => {});
-}, 13 * 60 * 1000); // alle 13 Minuten
+// Nur aktivieren, wenn ENABLE_SELF_PING in der .env auf "true" steht!
+if (process.env.ENABLE_SELF_PING === 'true') {
+  setInterval(() => {
+    fetch('https://hazri-online.onrender.com/health').catch(() => {});
+  }, 13 * 60 * 1000); // alle 13 Minuten
+}
+
 
 // Globales Error-Logging für Express
 app.use((err, req, res, next) => {
