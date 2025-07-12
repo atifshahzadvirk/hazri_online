@@ -35,7 +35,7 @@ function getValidIds() {
 async function validateEmployee({ name, role, idNumber, majlisName, department_id }, pool, skipIdExcelCheck = false) { // <--- pool statt connection
     // Pflichtfelder prüfen
     const rolesWithoutDepartment = ['MA', 'SI', 'SM']; // <-- NEU
-    if (!name || !role || !idNumber || !majlisName || (!department_id && !rolesWithoutDepartment.includes(role))) { // <-- ANPASSUNG
+    if (!name || !role || !idNumber || (!department_id && !rolesWithoutDepartment.includes(role))) { // <-- ANPASSUNG
         throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
     }
 
@@ -80,8 +80,9 @@ async function validateEmployee({ name, role, idNumber, majlisName, department_i
 }
 
 // Mitarbeiter anlegen (mit zentraler Prüfung)
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, authorizeRole(['admin', 'MA-HN', 'muntazim']), async (req, res) => {
     let { name, role, idNumber, majlisName, department_id } = req.body;
+
 
     // Für Muntazim: department_id immer aus Token nehmen (Backend-Absicherung)
     if (req.user.role === 'muntazim') {
@@ -124,9 +125,10 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // Mitarbeiter bearbeiten (PUT)
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, authorizeRole(['admin', 'MA-HN', 'muntazim']), async (req, res) => { // MA-HN freigeschaltet
     const id = req.params.id;
     const { name, role, idNumber, majlisName, department_id } = req.body;
+
 
     // Prüfung: Nur ein Muntazim pro Abteilung nach Update
     if (role === 'Muntazim') {
@@ -206,7 +208,7 @@ router.put('/:id', authenticate, async (req, res) => {
 });
 
     // Mitarbeiter löschen (DELETE)
-	router.delete('/:id', authenticate, async (req, res) => {
+	router.delete('/:id', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => { // MA-HN freigeschaltet
     	const id = req.params.id;
     // Muntazim-Schutz: Muntazim darf keinen Muntazim löschen
     	const [targetRows] = await pool.query('SELECT role FROM employees WHERE id = ?', [id]);
@@ -329,7 +331,7 @@ router.post('/verify-id', (req, res) => {
 });
 
 // Import (nur für Admin) - jetzt mit zentraler Prüfung und Fehlerprotokoll
-router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {  
+router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {  // hier einfügen
     if (!req.files?.file) {
         return res.status(400).json({
             summary: 'Keine Datei hochgeladen.',
@@ -373,6 +375,7 @@ router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (r
                     B_Majlis
                 );
                 success++;
+
             } catch (err) {
                 failed++;
                 failedEntries.push({
@@ -391,7 +394,7 @@ router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (r
 });
 
 // Komplett-Import (Bereiche/Abteilungen/Mitarbeiter) - jetzt mit zentraler Prüfung und Fehlerprotokoll
-router.post('/import-full', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
+router.post('/import-full', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {   // hier einfügen
     if (!req.files?.file) {
         return res.status(400).json({
             summary: 'Keine Datei hochgeladen.',
@@ -404,173 +407,428 @@ router.post('/import-full', authenticate, authorizeRole(['admin', 'MA-HN']), asy
         let success = 0, failed = 0;
         let failedEntries = [];
         
-        for (const row of jsonData) {
-            try {
-                // Validierung für ParentTyp
-                if (row.ParentTyp === 'SI' && row.Bereichsname) {
-                    throw new Error('Bei ParentTyp "SI" muss Bereichsname leer sein.');
-                }
-                
-                if (!row.Bereichsname && !row.ParentTyp) {
-                    throw new Error('Entweder Bereichsname oder ParentTyp muss angegeben sein.');
-                }
-                
-                                // NEU: Zentrale Logik für SM, MA, SI wie bei Einzelanlage
-                let departmentId = null;
-                if (['SM', 'MA', 'SI'].includes(row.Rolle)) {
-                    // Prüfen, ob schon vorhanden
-                    const [existing] = await pool.query(
-                        "SELECT COUNT(*) AS count FROM employees WHERE role = ?", [row.Rolle]
-                    );
-                    if (existing[0].count > 0) {
-                        throw new Error(`Es darf nur einen Mitarbeiter mit der Rolle ${row.Rolle} geben.`);
-                    }
-                    // Department für diese Rolle suchen oder anlegen
-                    const [dept] = await pool.query(
-                        "SELECT id FROM departments WHERE type = ? LIMIT 1", [row.Rolle]
-                    );
-                    if (dept.length > 0) {
-                        departmentId = dept[0].id;
-                    } else {
-                        // Neuen Department-Eintrag anlegen
-                        const result = await pool.query(
-                            "INSERT INTO departments (name, type) VALUES (?, ?)",
-                            [row.Mitarbeitername, row.Rolle]
-                        );
-                        departmentId = result[0].insertId;
-                    }
-                    await validateEmployee({
-                        name: row.Mitarbeitername,
-                        role: row.Rolle,
-                        idNumber: row.IDNummer,
-                        majlisName: row.Majlisname,
-                        department_id: departmentId
-                    }, pool); // <--- geändert!
-
-                    // Zusatzfelder aus Excel lesen
-                    let B_Name = '';
-                    let B_Majlis = '';
-                    const idNummer = row.IDNummer || row.idNumber;
-                    if (idNummer) {
-                        const validData = getValidIdData(idNummer);
-                        if (validData) {
-                            B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
-                            B_Majlis = validData["Majlis"] || '';
-                        }
-                    }
-
-                    await createEmployee(
-                        row.Mitarbeitername,
-                        row.Rolle,
-                        row.IDNummer,
-                        row.Majlisname,
-                        departmentId,
-                        req.user.username,
-                        B_Name,
-                        B_Majlis
-                    );
-                    success++;
-                    continue; // Rest der Schleife überspringen
-                }
-
-                // --- ALTE LOGIK FÜR BEREICHE UND ABTEILUNGEN BLEIBT UNVERÄNDERT ---
-                // 1. Bereich prüfen/ggf. anlegen (wenn Bereichsname vorhanden)
-                if (row.Bereichsname) {
-                    let [bereich] = await pool.query(
-                        "SELECT id FROM departments WHERE name = ? AND type = 'NMA'",
-                        [row.Bereichsname]
-                    );
-                    
-                    if (bereich.length === 0) {
-                        // Neuen Bereich anlegen mit parent_id auf MA (wenn ParentTyp angegeben)
-                        let result = await pool.query(
-                            "INSERT INTO departments (name, type, parent_id) VALUES (?, 'NMA', ?)",
-                            [row.Bereichsname, parentId]
-                        );
-                        bereichId = result[0].insertId;
-                    } else {
-                        bereichId = bereich[0].id;
-                        // Optional: parent_id aktualisieren, wenn ParentTyp angegeben
-                        if (parentId) {
-                            await pool.query(
-                                "UPDATE departments SET parent_id = ? WHERE id = ?",
-                                [parentId, bereichId]
-                            );
-                        }
-                    }
-                }
-                // 2. Abteilung prüfen/ggf. anlegen
-                let parentForAbteilung = bereichId;
-                if (!bereichId && row.ParentTyp === 'SI') {
-                    parentForAbteilung = parentId;
-                } else if (!bereichId && row.ParentTyp === 'MA') {
-                    parentForAbteilung = parentId;
-                }
-                let [abt] = await pool.query(
-                    "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
-                    [row.Abteilungsname, parentForAbteilung]
-                );
-                if (abt.length === 0) {
-                    let result = await pool.query(
-                        "INSERT INTO departments (name, type, parent_id) VALUES (?, 'Muntazim', ?)",
-                        [row.Abteilungsname, parentForAbteilung]
-                    );
-                    abteilungId = result[0].insertId;
-                } else {
-                    abteilungId = abt[0].id;
-                }
-
-                await validateEmployee({
-                    name: row.Mitarbeitername,
-                    role: row.Rolle,
-                    idNumber: row.IDNummer,
-                    majlisName: row.Majlisname,
-                    department_id: abteilungId
-                }, pool); // <--- geändert!
-
-                // Zusatzfelder aus Excel lesen
-                let B_Name = '';
-                let B_Majlis = '';
-                const idNummer = row.IDNummer || row.idNumber;
-                if (idNummer) {
-                    const validData = getValidIdData(idNummer);
-                    if (validData) {
-                        B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
-                        B_Majlis = validData["Majlis"] || '';
-                    }
-                }
-
-                await createEmployee(
-                    row.Mitarbeitername,
-                    row.Rolle,
-                    row.IDNummer,
-                    row.Majlisname,
-                    abteilungId,
-                    req.user.username,
-                    B_Name,
-                    B_Majlis
-                );
-                success++;
-
-            } catch (err) {
-                failed++;
-                failedEntries.push({
-                    row: row,
-                    reason: err.message
-                });
-            }
+             for (const row of jsonData) {
+  try {
+    // --- 1. SM, MA, SI: Spezialbehandlung ---
+    if (['SM', 'MA', 'SI'].includes(row.Rolle)) {
+      const [existing] = await pool.query(
+        "SELECT COUNT(*) AS count FROM employees WHERE role = ?", [row.Rolle]
+      );
+      if (existing[0].count > 0) {
+        throw new Error(`Es darf nur einen Mitarbeiter mit der Rolle ${row.Rolle} geben.`);
+      }
+      const [dept] = await pool.query(
+        "SELECT id FROM departments WHERE type = ? LIMIT 1", [row.Rolle]
+      );
+      let departmentId;
+      if (dept.length > 0) {
+        departmentId = dept[0].id;
+      } else {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type) VALUES (?, ?)",
+          [row.Mitarbeitername, row.Rolle]
+        );
+        departmentId = result[0].insertId;
+      }
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: departmentId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
         }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        departmentId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+
+    // --- 2. Bereichsleiter (NMA) ---
+    if (
+      row.Rolle === 'NMA' &&
+      row.ParentTyp === 'MA' &&
+      row.Bereichsname && !row.Abteilungsname
+    ) {
+      const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+      const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+      let [bereich] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'NMA'",
+        [row.Bereichsname]
+      );
+      let bereichId;
+      if (bereich.length === 0) {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type, parent_id) VALUES (?, 'NMA', ?)",
+          [row.Bereichsname, parentId]
+        );
+        bereichId = result[0].insertId;
+      } else {
+        bereichId = bereich[0].id;
+        if (parentId) {
+          await pool.query(
+            "UPDATE departments SET parent_id = ? WHERE id = ?",
+            [parentId, bereichId]
+          );
+        }
+      }
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: bereichId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
+        }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        bereichId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+
+    // --- 3. Abteilungsleiter/Mitarbeiter (Muntazim, Naib Muntazim, Muawin) unter MA ---
+    if (
+      ['Muntazim', 'Naib Muntazim', 'Muawin'].includes(row.Rolle) &&
+      row.ParentTyp === 'MA' &&
+      row.Bereichsname && row.Abteilungsname
+    ) {
+      const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+      const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+      let [bereich] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'NMA'",
+        [row.Bereichsname]
+      );
+      let bereichId;
+      if (bereich.length === 0) {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type, parent_id) VALUES (?, 'NMA', ?)",
+          [row.Bereichsname, parentId]
+        );
+        bereichId = result[0].insertId;
+      } else {
+        bereichId = bereich[0].id;
+        if (parentId) {
+          await pool.query(
+            "UPDATE departments SET parent_id = ? WHERE id = ?",
+            [parentId, bereichId]
+          );
+        }
+      }
+      let [abt] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
+        [row.Abteilungsname, bereichId]
+      );
+      let abteilungId;
+      if (abt.length === 0) {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type, parent_id) VALUES (?, 'Muntazim', ?)",
+          [row.Abteilungsname, bereichId]
+        );
+        abteilungId = result[0].insertId;
+      } else {
+        abteilungId = abt[0].id;
+      }
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: abteilungId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
+        }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        abteilungId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+
+    // --- 4. Abteilungsleiter unter SI (nur Muntazim, kein Bereich) ---
+    if (
+      row.ParentTyp === 'SI' &&
+      !row.Bereichsname &&
+      row.Abteilungsname &&
+      row.Rolle === 'Muntazim'
+    ) {
+      const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+      const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+      if (!parentId) throw new Error('Parent SI nicht gefunden.');
+      let [abt] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
+        [row.Abteilungsname, parentId]
+      );
+      let abteilungId;
+      if (abt.length === 0) {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type, parent_id) VALUES (?, 'Muntazim', ?)",
+          [row.Abteilungsname, parentId]
+        );
+        abteilungId = result[0].insertId;
+      } else {
+        abteilungId = abt[0].id;
+      }
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: abteilungId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
+        }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        abteilungId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+
+// <--- Block-Anfang Naib Muntazim unter SI NEU
+
+    if (
+  row.ParentTyp === 'SI' &&
+  !row.Bereichsname &&
+  row.Abteilungsname &&
+  (row.Rolle === 'Naib Muntazim' || row.Rolle === 'Muawin')
+) {
+  const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+  const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+  if (!parentId) throw new Error('Parent SI nicht gefunden.');
+  let [abt] = await pool.query(
+    "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
+    [row.Abteilungsname, parentId]
+  );
+  if (abt.length === 0) throw new Error('Abteilung (Muntazim) nicht gefunden. Naib Muntazim/Muawin kann nur unter bestehendem Muntazim angelegt werden.');
+  const abteilungId = abt[0].id;
+  await validateEmployee({
+    name: row.Mitarbeitername,
+    role: row.Rolle,
+    idNumber: row.IDNummer,
+    majlisName: row.Majlisname,
+    department_id: abteilungId
+  }, pool);
+  let B_Name = '', B_Majlis = '';
+  const idNummer = row.IDNummer || row.idNumber;
+  if (idNummer) {
+    const validData = getValidIdData(idNummer);
+    if (validData) {
+      B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+      B_Majlis = validData["Majlis"] || '';
+    }
+  }
+  await createEmployee(
+    row.Mitarbeitername,
+    row.Rolle,
+    row.IDNummer,
+    row.Majlisname,
+    abteilungId,
+    req.user.username,
+    B_Name,
+    B_Majlis
+  );
+  success++;
+  continue;
+}
+
+
+// <--- Block-Ende   Naib Muntazim unter SI NEU
+
+
+
+// <--- Block-Anfang NEU
+
+	    // --- NEU: Muawin unter Muntazim (direkt unter SI oder MA) ---
+    if (
+      (row.ParentTyp === 'SI' || row.ParentTyp === 'MA') &&
+      !row.Bereichsname &&
+      row.Abteilungsname &&
+      row.Rolle === 'Muawin'
+    ) { // <--- hier einbauen
+      const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+      const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+      if (!parentId) throw new Error(`Parent ${row.ParentTyp} nicht gefunden.`);
+      let [abt] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
+        [row.Abteilungsname, parentId]
+      );
+      if (abt.length === 0) throw new Error('Abteilung (Muntazim) nicht gefunden. Muawin kann nur unter bestehendem Muntazim angelegt werden.');
+      const abteilungId = abt[0].id;
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: abteilungId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
+        }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        abteilungId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+    // <--- Block-Ende NEU
+
+    // --- 5. Nur Abteilungsname, Bereichsname leer, Rolle = Muntazim, ParentTyp = MA ---
+    if (
+      row.ParentTyp === 'MA' &&
+      !row.Bereichsname &&
+      row.Abteilungsname &&
+      row.Rolle === 'Muntazim'
+    ) {
+      const [parentRows] = await pool.query("SELECT id FROM departments WHERE type = ?", [row.ParentTyp]);
+      const parentId = parentRows.length > 0 ? parentRows[0].id : null;
+      if (!parentId) throw new Error('Parent MA nicht gefunden.');
+      let [abt] = await pool.query(
+        "SELECT id FROM departments WHERE name = ? AND type = 'Muntazim' AND parent_id = ?",
+        [row.Abteilungsname, parentId]
+      );
+      let abteilungId;
+      if (abt.length === 0) {
+        const result = await pool.query(
+          "INSERT INTO departments (name, type, parent_id) VALUES (?, 'Muntazim', ?)",
+          [row.Abteilungsname, parentId]
+        );
+        abteilungId = result[0].insertId;
+      } else {
+        abteilungId = abt[0].id;
+      }
+
+      await validateEmployee({
+        name: row.Mitarbeitername,
+        role: row.Rolle,
+        idNumber: row.IDNummer,
+        majlisName: row.Majlisname,
+        department_id: abteilungId
+      }, pool);
+      let B_Name = '', B_Majlis = '';
+      const idNummer = row.IDNummer || row.idNumber;
+      if (idNummer) {
+        const validData = getValidIdData(idNummer);
+        if (validData) {
+          B_Name = [validData["First Name"], validData["Last Name"]].filter(Boolean).join(' ');
+          B_Majlis = validData["Majlis"] || '';
+        }
+      }
+      await createEmployee(
+        row.Mitarbeitername,
+        row.Rolle,
+        row.IDNummer,
+        row.Majlisname,
+        abteilungId,
+        req.user.username,
+        B_Name,
+        B_Majlis
+      );
+      success++;
+      continue;
+    }
+
+
+
+    // --- 6. Nicht erlaubte oder fehlerhafte Kombinationen ---
+    throw new Error('Ungültige Kombination aus Rolle, Bereichsname, Abteilungsname und ParentTyp.');
+
+  } catch (err) {
+    failed++;
+    failedEntries.push({
+      row: row,
+      reason: err.message
+    });
+  }
+}
+
+ 
+        // Ergebnis zurückgeben – diese Klammer gehört zur for-Schleife
         res.json({
             summary: `Import abgeschlossen: ${success} erfolgreich, ${failed} fehlgeschlagen.`,
             failedEntries: failedEntries
         });
+
     } catch (error) {
         res.status(500).json({ summary: 'Fehler beim Verarbeiten der Datei.', failedEntries: [] });
     }
 });
 
+
 // Export aller Mitarbeiter als Excel (nur für Admin)
-router.get('/export', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
+router.get('/export', authenticate, authorizeRole(['admin']), async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT e.*, 

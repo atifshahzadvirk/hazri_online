@@ -7,15 +7,16 @@ import { useTable, useSortBy, useFilters } from 'react-table';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // Rollen-Layouts zuweisen (Pfad ggf. anpassen)
-  const BADGE_LAYOUTS = {
-  Muawin: '/assets/layout-muawin.jpeg',
-  'Naib Muntazim': '/assets/layout-naibmuntazim.jpeg',
-  Muntazim: '/assets/layout-muntazim.jpeg',
-  NMA: '/assets/layout-nma.jpeg',
-  // ggf. weitere Rollen ergänzen
+const BADGE_LAYOUTS = {
+  Muawin: '/assets/layout-muawin.jpg',
+  'Naib Muntazim': '/assets/layout-naibmuntazim.jpg',
+  Muntazim: '/assets/layout-muntazim.jpg',
+  NMA: '/assets/layout-nma.jpg'
 };
 
-const DIN_A6_MM = [148, 105]; // Breite x Höhe in mm (quer)
+const mmToPt = (mm) => mm * 2.8346;
+const DIN_A6_PT = [mmToPt(148), mmToPt(105)]; // [419.52, 297.63]
+
 
 
 const EmployeeAdmin = () => {
@@ -45,57 +46,80 @@ const EmployeeAdmin = () => {
 const editRef = React.useRef(null);
 
 const [editMessage, setEditMessage] = useState('');
+const userRole = sessionStorage.getItem('role');
 
 // Hilfsfunktion: Bild als ArrayBuffer laden
 async function fetchImageAsArrayBuffer(url) {
-  const response = await fetch(url);
-  return await response.arrayBuffer();
-}
-
-
-const generateBadgesPDF = React.useCallback(async (mitarbeiterListe) => {
-  const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-  for (let i = 0; i < mitarbeiterListe.length; i++) {
-    const m = mitarbeiterListe[i];
-    const page = pdfDoc.addPage(DIN_A6_MM);
-
-    // Layout-Bild laden und einbinden
-    const layoutUrl = BADGE_LAYOUTS[m.role] || BADGE_LAYOUTS['Muawin'];
-    const imgBytes = await fetchImageAsArrayBuffer(layoutUrl);
-    let img;
-    if (layoutUrl.toLowerCase().endsWith('.png')) {
-      img = await pdfDoc.embedPng(imgBytes);
-    } else if (
-      layoutUrl.toLowerCase().endsWith('.jpg') ||
-      layoutUrl.toLowerCase().endsWith('.jpeg')
-    ) {
-      img = await pdfDoc.embedJpg(imgBytes);
-    } else {
-      throw new Error('Unbekanntes Bildformat für Layout: ' + layoutUrl);
-    }
-
-    page.drawImage(img, { x: 0, y: 0, width: DIN_A6_MM[0], height: DIN_A6_MM[1] });
-
-    // Textfelder platzieren (Koordinaten anpassen!)
-    page.drawText(m.B_Name || '', { x: 22, y: 41, size: 8, font, color: rgb(0, 0, 0) });
-    page.drawText(m.idNumber || '', { x: 15, y: 27, size: 7, font, color: rgb(0, 0, 0) });
-    page.drawText(m.abteilungsName || '', { x: 26, y: 34, size: 7, font, color: rgb(0, 0, 0) });
+    const response = await fetch(url);
+    return await response.arrayBuffer();
   }
 
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
+  const generateBadgesPDF = React.useCallback(async (mitarbeiterListe) => {
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'ausweise.pdf';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}, []);
+    for (let i = 0; i < mitarbeiterListe.length; i++) {
+      const m = mitarbeiterListe[i];
+      const page = pdfDoc.addPage(DIN_A6_PT);
+
+      const layoutUrl = BADGE_LAYOUTS[m.role] || BADGE_LAYOUTS['Muawin'];
+      const imgBytes = await fetchImageAsArrayBuffer(layoutUrl);
+      let img;
+      if (layoutUrl.toLowerCase().endsWith('.png')) {
+        img = await pdfDoc.embedPng(imgBytes);
+      } else if (layoutUrl.toLowerCase().endsWith('.jpg') || layoutUrl.toLowerCase().endsWith('.jpeg')) {
+        img = await pdfDoc.embedJpg(imgBytes);
+      } else {
+        throw new Error('Unbekanntes Bildformat für Layout: ' + layoutUrl);
+      }
+
+      const marginPt = mmToPt(3);
+      const usableWidth = DIN_A6_PT[0] - 2 * marginPt;
+      const usableHeight = DIN_A6_PT[1] - 2 * marginPt;
+
+      page.drawImage(img, {
+        x: marginPt,
+        y: marginPt,
+        width: usableWidth,
+        height: usableHeight
+      });
+
+      page.drawText(m.B_Name || '', {
+        x: mmToPt(24) + marginPt,
+        y: mmToPt(44) + marginPt,
+        size: 17,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      page.drawText(m.abteilungsName || '', {
+        x: mmToPt(27) + marginPt,
+        y: mmToPt(34) + marginPt,
+        size: 16,
+        font,
+        color: rgb(0, 0, 0)
+      });
+      page.drawText(m.idNumber || '', {
+        x: mmToPt(21) + marginPt,
+        y: mmToPt(24) + marginPt,
+        size: 16,
+        font,
+        color: rgb(0, 0, 0)
+      });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ausweise.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+
 
 useEffect(() => {
   if (editMitarbeiter) {
@@ -324,19 +348,27 @@ const handleEditSubmit = async (e) => {
     accessor: 'created_by',
     disableFilters: true // Kein Filter
   },
-  {
+    {
     Header: 'Aktionen',
     accessor: 'actions',
     disableFilters: true,
     Cell: ({ row }) => (
       <>
-        <button onClick={() => startEdit(row.original)}style={{ background: "#1976D2", color: "#fff" }}>Bearbeiten</button>
-        <button onClick={() => deleteEmployee(row.original.id)}style={{ background: "#e53935", color: "#fff" }}>Löschen</button>
-	<button onClick={() => handlePrintBadge(row.original)}style={{ background: "#1976D2", color: "#fff" }}>Erneut drucken</button>
+        {(userRole === 'admin' || userRole === 'MA-HN') && (
+          <>
+            <button onClick={() => startEdit(row.original)} style={{ background: "#1976D2", color: "#fff" }}>Bearbeiten</button>
+            <button onClick={() => deleteEmployee(row.original.id)} style={{ background: "#e53935", color: "#fff" }}>Löschen</button>
+          </>
+        )}
+        {(userRole === 'admin' || userRole === 'MA-HN') && (
+          <button onClick={() => handlePrintBadge(row.original)} style={{ background: "#1976D2", color: "#fff" }}>Erneut drucken</button>
+        )}
       </>
     )
   }
-], [selectedIds, toggleSelect, mitarbeiter, handlePrintBadge]);
+
+], [selectedIds, toggleSelect, mitarbeiter, handlePrintBadge, userRole]);
+
 
 
 	//filteredMitarbeiter und zugehörige States entfernt
@@ -575,7 +607,11 @@ const handleFilteredExport = () => {
     setMessage('Keine neuen Ausweise zum Drucken.');
     return;
   }
-  await generateBadgesPDF(toPrint);
+  const sortedToPrint = [...toPrint].sort((a, b) =>
+  (a.abteilungsName || '').localeCompare(b.abteilungsName || '')
+);
+await generateBadgesPDF(sortedToPrint);
+
   // Nach dem Export: Backend-Update für printed_on
   const token = sessionStorage.getItem('token');
   for (const m of toPrint) {
@@ -686,7 +722,7 @@ const deleteSelected = async () => {
 
   return (
     <div>
-      <h2>Mitarbeiterverwaltung (nur Admin)</h2>
+      <h2>Mitarbeiterverwaltung (nur Admin und MA-HN)</h2>
       <div className="badge-print-area">
   <h3>Ausweise drucken</h3>
   <button onClick={handlePrintNewBadges}
@@ -765,16 +801,21 @@ const deleteSelected = async () => {
   <></>
 )}
         <input name="idNumber" value={form.idNumber} onChange={handleChange} placeholder="ID Nummer" required />
-        <input name="majlisName" value={form.majlisName} onChange={handleChange} placeholder="Majlisname" required />
+        <input name="majlisName" value={form.majlisName} onChange={handleChange} placeholder="Majlisname" />
         <button type="submit"style={{ background: "#1976D2", color: "#fff" }}>Mitarbeiter anlegen</button>
       </form>
       {message && <p>{message}</p>}
 
-      <h3>Mitarbeiter-Import (Excel/CSV)</h3>
-      <input type="file" accept=".xlsx, .csv" onChange={handleFileUpload} />
-      <h3>Komplett-Import Bereiche/Abteilungen/Mitarbeiter (Excel/CSV)</h3>
-      <input type="file" accept=".xlsx, .csv" onChange={handleFullImport} />
-     {importMsg && importMsg.summary && (
+      {(userRole === 'admin' || userRole === 'MA-HN') && (
+  <>
+    <h3>Mitarbeiter-Import (Excel/CSV)</h3>
+    <input type="file" accept=".xlsx, .csv" onChange={handleFileUpload} />
+    <h3>Komplett-Import Bereiche/Abteilungen/Mitarbeiter (Excel/CSV)</h3>
+    <input type="file" accept=".xlsx, .csv" onChange={handleFullImport} />
+  </>
+)}
+
+{importMsg && importMsg.summary && (
   <div>
     <p>{importMsg.summary}</p>
     {importMsg.failedEntries && importMsg.failedEntries.length > 0 && (
@@ -783,7 +824,7 @@ const deleteSelected = async () => {
         <ul>
           {importMsg.failedEntries.map((entry, idx) => (
             <li key={idx}>
-              {(entry.row.name || entry.row.Mitarbeitername)}: {entry.reason}
+              {JSON.stringify(entry)}
             </li>
           ))}
         </ul>
@@ -792,50 +833,59 @@ const deleteSelected = async () => {
   </div>
 )}
 
+
 {importMsg && <pre>{JSON.stringify(importMsg, null, 2)}</pre>}
 
 
-      <p style={{fontSize: "small"}}>Die Datei für den klassischen Import muss die Spalten <b>name, role, department_id, idNumber, majlisName</b> enthalten.<br/>
-      Die Datei für den Komplett-Import muss die Spalten <b>Bereichsname, Abteilungsname, Mitarbeitername, Rolle, IDNummer, Majlisname, ParentTyp</b> enthalten. <br/>
-      <i>Hinweis zu ParentTyp: Bei "SI" muss Bereichsname leer sein. Bei "MA" kann Bereichsname gefüllt oder leer sein.</i></p>
-      <button onClick={handleExport}style={{ background: "#1976D2", color: "#fff" }}>Komplett Export MA als Excel</button>
-      <button onClick={handleFilteredExport}style={{ background: "#1976D2", color: "#fff" }}>Export Mitarbeiterliste &#8595;</button>
+	<p style={{fontSize: "small"}}>Die Datei für den klassischen Import muss die Spalten <b>name, role, department_id, idNumber, majlisName</b> 		enthalten.<br/>
+      	Die Datei für den Komplett-Import muss die Spalten <b>Bereichsname, Abteilungsname, Mitarbeitername, Rolle, IDNummer, Majlisname, ParentTyp</b> 	enthalten. <br/>
+      	<i>Hinweis zu ParentTyp: Bei "SI" muss Bereichsname leer sein. Bei "MA" kann Bereichsname gefüllt oder leer sein.</i></p>
+
+      	{userRole === 'admin' && (
+        <button onClick={handleExport} style={{ background: "#1976D2", color: "#fff" }}>Komplett Export MA als Excel</button>
+      	)}
+      	{userRole === 'admin' && (
+        <button onClick={handleFilteredExport} style={{ background: "#1976D2", color: "#fff" }}>Export Mitarbeiterliste &#8595;</button>
+      	)}
+
       	
       <h3>Mitarbeiterliste</h3>
-      <table className="employee-table" {...getTableProps()}>
-  <thead>
-  {headerGroups.map(headerGroup => (
-    <tr {...headerGroup.getHeaderGroupProps()}>
-      {headerGroup.headers.map(column => (
-        <th {...column.getHeaderProps(column.getSortByToggleProps())}>
-          {column.render('Header')}
-          <span>
-            {column.isSorted
-              ? column.isSortedDesc
-                ? ' 🔽'
-                : ' 🔼'
-              : ''}
-          </span>
-          {/* Filter nur anzeigen, wenn nicht disableFilters */}
-          {!column.disableFilters && column.canFilter ? (
-            <div>{column.render('Filter')}</div>
-          ) : null}
-        </th>
-      ))}
-    </tr>
-  ))}
-</thead>
-  <tbody {...getTableBodyProps()}>
-    {rows.map(row => {
-      prepareRow(row);
-      return (
-        <tr {...row.getRowProps()}>
-          {row.cells.map(cell => <td {...cell.getCellProps()}>{cell.render('Cell')}</td>)}
-        </tr>
-      );
-    })}
-  </tbody>
-</table>
+   <div className="table-scroll-outer">
+  <div className="table-scroll-inner">
+    <table className="employee-table" {...getTableProps()}>
+      <thead>
+        {headerGroups.map(headerGroup => (
+          <tr {...headerGroup.getHeaderGroupProps()}>
+            {headerGroup.headers.map(column => (
+              <th {...column.getHeaderProps(column.getSortByToggleProps())}>
+                {column.render('Header')}
+                <span>
+                  {column.isSorted ? (column.isSortedDesc ? ' 🔽' : ' 🔼') : ''}
+                </span>
+                {!column.disableFilters && column.canFilter ? (
+                  <div>{column.render('Filter')}</div>
+                ) : null}
+              </th>
+            ))}
+          </tr>
+        ))}
+      </thead>
+      <tbody {...getTableBodyProps()}>
+        {rows.map(row => {
+          prepareRow(row);
+          return (
+            <tr {...row.getRowProps()}>
+              {row.cells.map(cell => (
+                <td {...cell.getCellProps()}>{cell.render('Cell')}</td>
+              ))}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</div>
+
 	{selectedIds.length > 0 && (
   <button onClick={deleteSelected}
   style={{ marginLeft: 8, background: "#e53935", color: "#fff" }}
@@ -930,7 +980,7 @@ const deleteSelected = async () => {
             )}
 
             <input name="idNumber" value={editForm.idNumber} onChange={handleEditChange} placeholder="ID Nummer" required />
-            <input name="majlisName" value={editForm.majlisName} onChange={handleEditChange} placeholder="Majlisname" required />
+            <input name="majlisName" value={editForm.majlisName} onChange={handleEditChange} placeholder="Majlisname" />
 	    
             <button type="submit"style={{ background: "#1976D2", color: "#fff" }}>Speichern</button>
             <button type="button" onClick={() => { setEditMitarbeiter(null); setEditMessage(''); }}style={{ background: "#FF9800", color: "#fff" }}>	  	    Abbrechen</button>

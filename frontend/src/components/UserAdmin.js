@@ -21,6 +21,14 @@ const UserAdmin = () => {
   const [importMsg, setImportMsg] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
+  const userRole = sessionStorage.getItem('role');
+  // --- NEU: State für Benutzertabelle und Bearbeiten ---
+  const [userList, setUserList] = useState([]);
+  const [editUser, setEditUser] = useState(null); // Für Bearbeiten
+
+  // Sichtbarkeit der Benutzertabelle steuern
+  const [showUserTable, setShowUserTable] = useState(false);
+
   // Mapping für Enum-Werte
   // // (entfernt, Mapping nicht mehr nötig!)
 
@@ -60,6 +68,19 @@ const UserAdmin = () => {
       setAbteilungen([]);
     }
   }, [selectedBereich, form.role]);
+
+// --- NEU: Alle Benutzer beim Laden abrufen (nur für admin) ---
+useEffect(() => {
+  if (userRole !== 'admin') return;
+  const token = sessionStorage.getItem('token');
+  fetch(`${process.env.REACT_APP_API_URL}/api/auth/users`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(setUserList)
+    .catch(() => setUserList([]));
+}, [userRole]);
+
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -180,10 +201,43 @@ const UserAdmin = () => {
   reader.readAsBinaryString(file);
 };
 
+// --- NEU: Handler für das Bearbeiten eines Benutzers ---
+const handleEditUser = async (e) => {
+  e.preventDefault();
+  const token = sessionStorage.getItem('token');
+  const { id, username, role, department_id, idNumber, password } = editUser;
+  const body = { username, role, department_id, idNumber };
+  if (password) body.password = password;
+
+  await fetch(`${process.env.REACT_APP_API_URL}/api/auth/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(body)
+  });
+  setEditUser(null);
+  // Tabelle neu laden
+  fetch(`${process.env.REACT_APP_API_URL}/api/auth/users`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(setUserList)
+    .catch(() => setUserList([]));
+};
+
 
   return (
     <div>
       <h2>Benutzerverwaltung (nur Admin)</h2>
+      
+{userRole === 'admin' && (		// Button zum Ein-/Ausblenden der Benutzertabelle (nur für admin)
+  <button
+    style={{ marginBottom: 16, background: "#1976D2", color: "#fff" }}
+    onClick={() => setShowUserTable(v => !v)}
+  >
+    Benutzertabelle {showUserTable ? "ausblenden" : "einblenden"}
+  </button>
+)}
+
       <h3>Einzelnen Benutzer anlegen</h3>
       <form onSubmit={handleUserSubmit}>
         <input name="username" value={form.username} onChange={handleChange} placeholder="Benutzername" required />
@@ -219,6 +273,7 @@ const UserAdmin = () => {
           <option value="admin">admin</option>
           <option value="muntazim">muntazim</option>
           <option value="NMA(read-only)">NMA(read-only)</option>
+	  <option value="MA-HN">MA-HN</option>
         </select>
         {/* Bereich-Auswahl nur für NMA(read-only) und muntazim */}
         {(form.role === 'NMA(read-only)' || form.role === 'muntazim') && (
@@ -258,28 +313,102 @@ const UserAdmin = () => {
   	  }}
 	/>
 
-        <button type="submit"style={{ background: "#1976D2", color: "#fff" }}>Benutzer anlegen</button>
-      </form>
-      {message && <p>{message}</p>}
+              <button type="submit"style={{ background: "#1976D2", color: "#fff" }}>Benutzer anlegen</button>
+    </form>
+    {message && <p>{message}</p>}
 
-      <h3>Benutzer-Import (Excel/CSV)</h3>
-      <input type="file" accept=".xlsx, .csv" onChange={handleFileUpload} />
-      {importMsg && importMsg.summary && (
-  <div>
-    <p>{importMsg.summary}</p>
-    {importMsg.failedEntries && importMsg.failedEntries.length > 0 && (
-      <div>
-        <h4>Fehlgeschlagene Datensätze:</h4>
-        <ul>
-          {importMsg.failedEntries.map((entry, idx) => (
-            <li key={idx}>
-              {entry.row.username}: {entry.reason}
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-  </div>
+    {userRole === 'admin' && (
+      <>
+        <h3>Benutzer-Import (Excel/CSV)</h3>
+        <input type="file" accept=".xlsx, .csv" onChange={handleFileUpload} />
+        {importMsg && importMsg.summary && (
+          <div>
+            <p>{importMsg.summary}</p>
+            {importMsg.failedEntries && importMsg.failedEntries.length > 0 && (
+              <div>
+                <h4>Fehlgeschlagene Datensätze:</h4>
+                <ul>
+                  {importMsg.failedEntries.map((entry, idx) => (
+                    <li key={idx}>
+                      {JSON.stringify(entry)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+	{/* --- NEU: Benutzertabelle und Bearbeiten-Formular --- */}
+	{showUserTable && (
+  	 <>
+
+          <h3>Alle Benutzer</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Benutzername</th>
+                <th>Rolle</th>
+                <th>Abteilung</th>
+                <th>ID Nummer</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {userList.map(user => (
+                <tr key={user.id}>
+                  <td>{user.username}</td>
+                  <td>{user.role}</td>
+                  <td>{user.department_id}</td>
+                  <td>{user.idNumber}</td>
+                  <td>
+                    <button onClick={() => setEditUser({ ...user, password: '' })}>Bearbeiten</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {editUser && (
+  <form onSubmit={handleEditUser} style={{ marginTop: 20, border: '1px solid #ccc', padding: 10 }}>
+    <h4>Benutzer bearbeiten: {editUser.username}</h4>
+    <label>
+      Benutzername:
+      <input
+        value={editUser.username}
+        onChange={e => setEditUser({ ...editUser, username: e.target.value })}
+      />
+    </label>
+    <label>
+      Rolle:
+      <select value={editUser.role} onChange={e => setEditUser({ ...editUser, role: e.target.value })}>
+        <option value="admin">admin</option>
+        <option value="muntazim">muntazim</option>
+        <option value="NMA(read-only)">NMA(read-only)</option>
+        <option value="MA-HN">MA-HN</option>
+      </select>
+    </label>
+    <label>
+      Abteilung:
+      <input value={editUser.department_id || ''} onChange={e => setEditUser({ ...editUser, department_id: e.target.value })} />
+    </label>
+    <label>
+      ID Nummer:
+      <input value={editUser.idNumber || ''} onChange={e => setEditUser({ ...editUser, idNumber: e.target.value })} />
+    </label>
+    <label>
+      Neues Passwort (optional):
+      <input type="password" value={editUser.password || ''} onChange={e => setEditUser({ ...editUser, password: e.target.value })} />
+    </label>
+    <button type="submit" style={{ background: "#1976D2", color: "#fff" }}>Speichern</button>
+    <button type="button" onClick={() => setEditUser(null)} style={{ background: "#FF9800", color: "#fff" }}>Abbrechen</button>
+  </form>
+ )}
+
+</>
+ )}
+
+ </>
 )}
 
       <p style={{fontSize: "small"}}>Die Datei muss die Spalten <b>username, password, department_id, role, idNumber</b> enthalten.</p>

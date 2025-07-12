@@ -2,9 +2,9 @@
 const pool = require('../db'); // <--- Korrigiert!
 
 const createEmployee = async (name, role, idNumber, majlisName, department_id, created_by, B_Name, B_Majlis) => {
-    if (!name || !role || !idNumber || !majlisName) {
-        throw new Error('Alle Pflichtfelder müssen ausgefüllt werden.');
-    }
+    if (!name || !role || !idNumber) {
+    throw new Error('Alle Pflichtfelder müssen ausgefüllt werden.');
+  }
     try {
         const [result] = await pool.query(
             'INSERT INTO employees (name, role, idNumber, majlisName, department_id, created_by, B_Name, B_Majlis) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',

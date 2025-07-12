@@ -67,7 +67,7 @@ async function validateUser({ username, password, role, idNumber, department_id 
     }
 
     // Nur für bestimmte Rollen department_id prüfen
-    if ((role === 'muntazim' || role === 'NMA(read-only)' || role === 'MA-HN') && !department_id) {
+    if ((role === 'muntazim' || role === 'NMA(read-only)') && !department_id) {
         throw new Error('Abteilung/Bereich muss ausgewählt werden.');
     }
 
@@ -128,7 +128,7 @@ router.post('/register', authenticate, async (req, res) => {
 
 
 // Massen-Upload mit Backup (Excel/CSV)
-router.post('/import', authenticate, authorizeRole(['admin', 'MA-HN']), async (req, res) => {
+router.post('/import', authenticate, authorizeRole(['admin']), async (req, res) => {
     if (!req.files || !req.files.file) {
         return res.status(400).json({ 
             summary: 'Keine Datei hochgeladen.',
@@ -214,5 +214,41 @@ router.post('/login', async (req, res) => {
         res.status(500).send('Fehler beim Login');
     }
 });
+
+// --- Admin: Benutzer bearbeiten (jetzt auch Benutzername änderbar) ---
+router.put('/users/:id', authenticate, authorizeRole(['admin']), async (req, res) => {
+  const { username, role, department_id, idNumber, password } = req.body; // <-- username ergänzt
+  const fields = [];
+  const values = [];
+  if (username) { fields.push('username = ?'); values.push(username); } // <-- NEU: Benutzername bearbeiten
+  if (role) { fields.push('role = ?'); values.push(role); }
+  if (department_id !== undefined) { fields.push('department_id = ?'); values.push(department_id); }
+  if (idNumber) { fields.push('idNumber = ?'); values.push(idNumber); }
+  if (password) {
+    const hashed = await bcrypt.hash(password, 10);
+    fields.push('password = ?'); values.push(hashed);
+  }
+  if (fields.length === 0) return res.status(400).json({ message: 'Keine Felder zum Aktualisieren.' });
+  values.push(req.params.id);
+  try {
+    await pool.query(`UPDATE muntazim SET ${fields.join(', ')} WHERE id = ?`, values);
+    res.json({ message: 'Benutzer aktualisiert.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Fehler beim Aktualisieren des Benutzers.' });
+  }
+});
+
+// --- Admin: Alle Benutzer abrufen (ohne Passwort-Hash) ---
+router.get('/users', authenticate, authorizeRole(['admin']), async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT id, username, role, department_id, idNumber FROM muntazim'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Fehler beim Laden der Benutzer.' });
+  }
+});
+
 
 module.exports = router;

@@ -25,15 +25,13 @@ function App() {
       {isLoggedIn && <UserAreaInfo />}
       {/* Admin-Ansicht */}
       {isLoggedIn && userRole === 'admin' && <UserAdmin />}
-      {isLoggedIn && userRole === 'admin' && <EmployeeAdmin />}
-      {/* NMA(read-only)-Ansicht */}
+      {isLoggedIn && (userRole === 'admin' || userRole === 'MA-HN') && <EmployeeAdmin />}
       {isLoggedIn && userRole === 'NMA(read-only)' && <NMAView />}
-      {/* Muntazim-Ansicht */}
       {isLoggedIn && userRole === 'muntazim' && <MuntazimView />}
-      {/* Fallback für andere Rollen */}
-      {isLoggedIn && !['admin', 'NMA(read-only)', 'muntazim'].includes(userRole) && (
-        <EmployeeForm userRole={userRole} />
-      )}
+      {isLoggedIn && !['admin', 'MA-HN', 'NMA(read-only)', 'muntazim'].includes(userRole) && (
+   <EmployeeForm userRole={userRole} />
+ )}
+
       {!isLoggedIn && <Login setIsLoggedIn={setIsLoggedIn} setUserRole={setUserRole} />}
     </div>
   );

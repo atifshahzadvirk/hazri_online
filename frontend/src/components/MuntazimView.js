@@ -162,7 +162,7 @@ useEffect(() => {
           <option value="Naib Muntazim">Naib Muntazim</option>
         </select>
         <input name="idNumber" value={form.idNumber} onChange={handleChange} placeholder="ID Nummer" required />
-        <input name="majlisName" value={form.majlisName} onChange={handleChange} placeholder="Majlisname" required />
+        <input name="majlisName" value={form.majlisName} onChange={handleChange} placeholder="Majlisname" />
         <button type="submit"style={{ background: "#1976D2", color: "#fff" }}>Mitarbeiter anlegen</button>
       </form>
       {message && <p>{message}</p>}
